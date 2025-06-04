@@ -42,7 +42,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         List<String> privileges = new ArrayList<>();
         List<Privilege> collection = new ArrayList<>();
         for (Role role : roles) {
-            privileges.add("ROLE_" + role.getName()); // Upewnij się, że role są z prefiksem!
+            privileges.add(role.getName());
             collection.addAll(role.getPrivileges());
         }
         for (Privilege item : collection) {
