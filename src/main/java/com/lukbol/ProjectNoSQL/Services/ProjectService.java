@@ -13,11 +13,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ProjectService {
     private final ProjectRepository projectRepository;
-
-    public ProjectService(ProjectRepository projectRepository) {
-        this.projectRepository = projectRepository;
-    }
-
     public List<Project> getAllProjects() {
         return projectRepository.findAll();
     }
