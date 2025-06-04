@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @Controller
@@ -48,5 +49,29 @@ public class UserController {
     @PostMapping("/user/logout")
     public ResponseEntity<Map<String, Object>> logout(HttpServletRequest request) {
         return userService.logout(request);
+    }
+    @GetMapping("/user/getAllUsers")
+    public ResponseEntity<List<User>> getAllUsers() {
+        List<User> users = userService.getAllUsers();
+        return ResponseEntity.ok(users);
+    }
+
+    @GetMapping("/user/getUserById/{id}")
+    public ResponseEntity<User> getUserById(@PathVariable String id) {
+        return userService.getUserById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/user/byProject/{projectId}")
+    public ResponseEntity<List<User>> getUsersByProjectId(@PathVariable String projectId) {
+        List<User> users = userService.getUsersByProjectId(projectId);
+        return ResponseEntity.ok(users);
+    }
+
+    @GetMapping("/user/byTask/{taskId}")
+    public ResponseEntity<List<User>> getUsersByTaskId(@PathVariable String taskId) {
+        List<User> users = userService.getUsersByTaskId(taskId);
+        return ResponseEntity.ok(users);
     }
 }

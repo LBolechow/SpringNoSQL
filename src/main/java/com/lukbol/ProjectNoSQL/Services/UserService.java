@@ -3,9 +3,7 @@ package com.lukbol.ProjectNoSQL.Services;
 import com.lukbol.ProjectNoSQL.Models.BlacklistedToken;
 import com.lukbol.ProjectNoSQL.Models.Role;
 import com.lukbol.ProjectNoSQL.Models.User;
-import com.lukbol.ProjectNoSQL.Repositories.BlacklistedTokenRepository;
-import com.lukbol.ProjectNoSQL.Repositories.RoleRepository;
-import com.lukbol.ProjectNoSQL.Repositories.UserRepository;
+import com.lukbol.ProjectNoSQL.Repositories.*;
 import com.lukbol.ProjectNoSQL.Utils.JwtUtil;
 import com.lukbol.ProjectNoSQL.Utils.UserUtils;
 import io.jsonwebtoken.Claims;
@@ -42,6 +40,10 @@ public class UserService {
     private final AuthenticationManager authenticationManager;
 
     private final BlacklistedTokenRepository blacklistedTokenRepository;
+
+    private final ProjectRepository projectRepository;
+
+    private final TaskRepository taskRepository;
 
     public ResponseEntity<Map<String, Object>> authenticateUser(String usernameOrEmail,
                                                                 String password) {
@@ -195,6 +197,14 @@ public class UserService {
         return userUtils.createSuccessResponse("Poprawnie usunięto konto.");
     }
 
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    public Optional<User> getUserById(String id) {
+        return userRepository.findById(id);
+    }
+
 
     public ResponseEntity<Map<String, Object>> logout(HttpServletRequest request) {
         String token = jwtUtil.extractJwtFromRequest(request);
@@ -213,8 +223,29 @@ public class UserService {
         BlacklistedToken blacklistedToken = new BlacklistedToken(token, issuedAt);
         blacklistedTokenRepository.save(blacklistedToken);
 
-        //Przekierowanie do strony login po stronie frontendu.
+
         return userUtils.createSuccessResponse("Wylogowano pomyślnie");
 
     }
+    public List<User> getUsersByProjectId(String projectId) {
+        return projectRepository.findById(projectId)
+                .map(project -> {
+                    List<User> users = new ArrayList<>();
+                    if (project.getOwner() != null) {
+                        users.add(project.getOwner());
+                    }
+                    if (project.getMembers() != null) {
+                        users.addAll(project.getMembers());
+                    }
+                    return users;
+                })
+                .orElse(Collections.emptyList());
+    }
+
+    public List<User> getUsersByTaskId(String taskId) {
+        return taskRepository.findById(taskId)
+                .map(task -> task.getAssignedTo() != null ? task.getAssignedTo() : Collections.<User>emptyList())
+                .orElse(Collections.<User>emptyList());
+    }
+
 }

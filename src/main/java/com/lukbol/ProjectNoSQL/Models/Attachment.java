@@ -12,12 +12,15 @@ import java.util.List;
 @Setter
 @Document(collection = "attachments")
 public class Attachment {
+
     @Id
     private String id;
 
     private String fileName;
     private String fileType;
-    private String fileUrl; // URL do pliku (np. w S3 lub lokalnym storage)
+    private String gridFsFileId;
+
+    private String comment;
 
     @DBRef
     private Task task;
