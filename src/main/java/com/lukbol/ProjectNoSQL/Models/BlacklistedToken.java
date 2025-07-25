@@ -13,7 +13,7 @@ import java.util.Date;
 public class BlacklistedToken {
 
     @Id
-    private String id; // String zamiast Long – Mongo używa ObjectId jako Stringa
+    private String id; 
 
     private String token;
 
