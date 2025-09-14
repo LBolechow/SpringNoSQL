@@ -1,5 +1,9 @@
 package com.lukbol.ProjectNoSQL.Controllers;
 
+import com.lukbol.ProjectNoSQL.DTOs.ApiResponseDTO;
+import com.lukbol.ProjectNoSQL.DTOs.RegisterUserDTO;
+import com.lukbol.ProjectNoSQL.DTOs.UpdateProfileDTO;
+import com.lukbol.ProjectNoSQL.DTOs.UserDTO;
 import com.lukbol.ProjectNoSQL.Models.User;
 import com.lukbol.ProjectNoSQL.Services.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,66 +16,67 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
-@Controller
+@RestController
 @RequiredArgsConstructor
+@CrossOrigin(maxAge = 3600)
 public class UserController {
     private final UserService userService;
 
-    @GetMapping("/userDetails")
-    public ResponseEntity<User> getUserDetails(Authentication authentication) {
-        return userService.getUserDetails(authentication);
+    @GetMapping("/user/details")
+    public ResponseEntity<UserDTO> getUserDetails(Authentication authentication) {
+        UserDTO userDTO = userService.getUserDetails(authentication);
+        return ResponseEntity.ok(userDTO);
     }
 
     @PostMapping("/user/register")
-    public ResponseEntity<Map<String, Object>> registerUser(@RequestParam("username") String username,
-                                                            @RequestParam("name") String name,
-                                                            @RequestParam("surname") String surname,
-                                                            @RequestParam("email") String email,
-                                                            @RequestParam("phoneNumber") String phoneNumber,
-                                                            @RequestParam("password") String password
-    ) {
-        return userService.registerUser(username, name, surname, email ,phoneNumber, password);
+    public ResponseEntity<ApiResponseDTO> registerUser(@RequestBody RegisterUserDTO registerUserDTO) {
+        ApiResponseDTO response = userService.registerUser(registerUserDTO);
+        return ResponseEntity.ok(response);
     }
+
     @PutMapping("/user/apply")
-    public ResponseEntity<Map<String, Object>> changeProfile(Authentication authentication, @RequestParam("name") String name,
-                                                             @RequestParam("surname") String surname,
-                                                             @RequestParam("email") String email,
-                                                             @RequestParam("phoneNumber") String phoneNumber,
-                                                             @RequestParam("password") String password,
-                                                             @RequestParam("repeatPassword") String repeatPassword)
-    {
-        return userService.changeProfile(authentication, name, surname, email, phoneNumber, password, repeatPassword);
+    public ResponseEntity<ApiResponseDTO> changeProfile(
+            Authentication authentication,
+            @RequestBody UpdateProfileDTO updateProfileDTO
+    ) {
+        ApiResponseDTO response = userService.changeProfile(authentication, updateProfileDTO);
+        return ResponseEntity.ok(response);
     }
-    @DeleteMapping("/user/deleteUser")
-    public ResponseEntity<Map<String, Object>> deleteUser(Authentication authentication) {
-        return userService.deleteUser(authentication);
+
+    @DeleteMapping("/user/delete")
+    public ResponseEntity<ApiResponseDTO> deleteUser(Authentication authentication) {
+        ApiResponseDTO response = userService.deleteUser(authentication);
+        return ResponseEntity.ok(response);
     }
+
     @PostMapping("/user/logout")
-    public ResponseEntity<Map<String, Object>> logout(HttpServletRequest request) {
-        return userService.logout(request);
+    public ResponseEntity<ApiResponseDTO> logout(HttpServletRequest request) {
+        ApiResponseDTO response = userService.logout(request);
+        return ResponseEntity.ok(response);
     }
-    @GetMapping("/user/getAllUsers")
-    public ResponseEntity<List<User>> getAllUsers() {
-        List<User> users = userService.getAllUsers();
+
+    @GetMapping("/user/all")
+    public ResponseEntity<List<UserDTO>> getAllUsers() {
+        List<UserDTO> users = userService.getAllUsers();
         return ResponseEntity.ok(users);
     }
 
-    @GetMapping("/user/getUserById/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable String id) {
+    @GetMapping("/user/{id}")
+    public ResponseEntity<UserDTO> getUserById(@PathVariable String id) {
         return userService.getUserById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/user/byProject/{projectId}")
-    public ResponseEntity<List<User>> getUsersByProjectId(@PathVariable String projectId) {
-        List<User> users = userService.getUsersByProjectId(projectId);
+    public ResponseEntity<List<UserDTO>> getUsersByProjectId(@PathVariable String projectId) {
+        List<UserDTO> users = userService.getUsersByProjectId(projectId);
         return ResponseEntity.ok(users);
     }
 
     @GetMapping("/user/byTask/{taskId}")
-    public ResponseEntity<List<User>> getUsersByTaskId(@PathVariable String taskId) {
-        List<User> users = userService.getUsersByTaskId(taskId);
+    public ResponseEntity<List<UserDTO>> getUsersByTaskId(@PathVariable String taskId) {
+        List<UserDTO> users = userService.getUsersByTaskId(taskId);
         return ResponseEntity.ok(users);
     }
 }

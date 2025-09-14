@@ -1,5 +1,7 @@
 package com.lukbol.ProjectNoSQL.Services;
 
+import com.lukbol.ProjectNoSQL.DTOs.*;
+import com.lukbol.ProjectNoSQL.Exceptions.ApplicationException;
 import com.lukbol.ProjectNoSQL.Models.BlacklistedToken;
 import com.lukbol.ProjectNoSQL.Models.Role;
 import com.lukbol.ProjectNoSQL.Models.User;
@@ -9,243 +11,178 @@ import com.lukbol.ProjectNoSQL.Utils.UserUtils;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataAccessException;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
-
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final UserUtils userUtils;
-
-    private final UserRepository userRepository;
-
-    private final RoleRepository roleRepository;
-
-    private final AuthenticationManager authenticationManager;
-
     private final BlacklistedTokenRepository blacklistedTokenRepository;
-
     private final ProjectRepository projectRepository;
-
     private final TaskRepository taskRepository;
 
-    public ResponseEntity<Map<String, Object>> authenticateUser(String usernameOrEmail,
-                                                                String password) {
+    public ApiResponseDTO authenticateUser(AuthenticateRequestDTO requestDTO) {
+        String usernameOrEmail = requestDTO.usernameOrEmail();
+        String password = requestDTO.password();
         String username;
-        try {
-            if (usernameOrEmail.contains("@") && usernameOrEmail.contains(".")) {
-                User userByEmail = userRepository.findByEmail(usernameOrEmail);
-                if (userByEmail == null) {
-                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                            .body(Collections.singletonMap("message", "Nie znaleziono użytkownika o takim adresie email."));
-                }
-                username = userByEmail.getUsername();
-            } else {
-                username = usernameOrEmail;
+
+        if (usernameOrEmail.contains("@") && usernameOrEmail.contains(".")) {
+            User userByEmail = userRepository.findByEmail(usernameOrEmail);
+            if (userByEmail == null) {
+                throw new ApplicationException.UserNotFoundException(
+                        "Nie znaleziono użytkownika o takim adresie email."
+                );
             }
-            User user = userRepository.findOptionalByUsername(username)
-                    .orElseThrow(() -> new UsernameNotFoundException("Brak użytkownika z taką nazwą: " + username));
-
-
-
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(username, password)
-            );
-
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            String token = jwtUtil.generateToken(username);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("token", token);
-            response.put("redirectUrl", "http://localhost:4200/board");
-            response.put("username", username);
-            return ResponseEntity.ok(response);
-
-        } catch (BadCredentialsException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Collections.singletonMap("message", "Błędna nazwa użytkownika/email lub hasło."));
+            username = userByEmail.getUsername();
+        } else {
+            username = usernameOrEmail;
         }
+
+        User user = userRepository.findOptionalByUsername(username)
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
+                        "Brak użytkownika z taką nazwą: " + username
+                ));
+
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(username, password)
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        String token = jwtUtil.generateToken(username);
+        return new ApiResponseDTO(true, "Zalogowano pomyślnie. Token: " + token);
     }
 
-    public ResponseEntity<Map<String, Object>> registerUser(String username, String name, String surname, String email , String phoneNumber, String password) {
+    public ApiResponseDTO registerUser(RegisterUserDTO dto) {
+        if (userUtils.emailExists(dto.email()))
+            throw new ApplicationException.UserWithEmailAlreadyExistsException("Użytkownik o takim adresie email już istnieje.");
 
-        if (userUtils.emailExists(email)) {
-            return userUtils.createErrorResponse("Użytkownik o takim adresie email już istnieje.");
-        }
+        if (userUtils.phoneNumberExists(dto.phoneNumber()))
+            throw new ApplicationException.UserWithPhoneNumberAlreadyExistsException("Użytkownik o takim numerze telefonu już istnieje.");
 
-        if (userUtils.phoneNumberExists(phoneNumber)) {
-            return userUtils.createErrorResponse("Użytkownik o takim numerze telefonu już istnieje.");
-        }
-        if (userUtils.usernameExists(username)) {
-            return userUtils.createErrorResponse("Użytkownik o takiej nazwie użytkownika już istnieje.");
-        }
+        if (userUtils.usernameExists(dto.username()))
+            throw new ApplicationException.UserWithUsernameAlreadyExistsException("Użytkownik o takiej nazwie użytkownika już istnieje.");
 
-        if (!userUtils.isValidPassword(password)) {
-            return userUtils.createErrorResponse("Hasło musi spełniać określone kryteria bezpieczeństwa.");
-        }
+        if (!userUtils.isValidPassword(dto.password()))
+            throw new ApplicationException.InvalidPasswordException("Hasło musi spełniać określone kryteria bezpieczeństwa.");
 
-
-        User regUser = new User(name, surname, email, phoneNumber, passwordEncoder.encode(password), username, false);
-
-        //Automatycznie nadaję rolę Client podczas rejestracji.
+        User user = new User(dto.name(), dto.surname(), dto.email(), dto.phoneNumber(),
+                passwordEncoder.encode(dto.password()), dto.username(), false);
         Role role = roleRepository.findByName("ROLE_CLIENT");
-        regUser.setRoles(Arrays.asList(role));
+        user.setRoles(Collections.singletonList(role));
 
-        try {
-            userRepository.save(regUser);
-        } catch (DataAccessException e) {
-            return userUtils.createErrorResponse("Błąd: " + e.getMessage());
-        }
-
-        return userUtils.createSuccessResponse("Poprawnie utworzono konto.");
+        userRepository.save(user); // jeśli coś pójdzie nie tak, DataAccessException zostanie obsłużone globalnie
+        return new ApiResponseDTO(true, "Poprawnie utworzono konto.");
     }
 
-    public ResponseEntity<User> getUserDetails(Authentication authentication)
-    {
-        if (authentication == null) {
-            return null;
-        }
-        Object principal = authentication.getPrincipal();
+    public UserDTO getUserDetails(Authentication authentication) {
+        if (authentication == null)
+            throw new ApplicationException.UserNotFoundException("Brak uwierzytelnienia.");
 
-        String username = ((UserDetails)principal).getUsername();
-
+        String username = ((UserDetails) authentication.getPrincipal()).getUsername();
         User user = userRepository.findOptionalByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
+                        "Nie znaleziono użytkownika z nazwą: " + username
+                ));
 
-
-
-        return ResponseEntity.ok(user);
+        return new UserDTO(user.getId(), user.getUsername(), user.getName(), user.getSurname(), user.getEmail(), user.getPhoneNumber());
     }
 
-    public ResponseEntity<Map<String, Object>> changeProfile(Authentication authentication,
-                                                             String name,
-                                                             String surname,
-                                                             String email,
-                                                             String phoneNumber,
-                                                             String password,
-                                                             String repeatPassword) {
-
-        Object principal = authentication.getPrincipal();
-        String username = ((UserDetails) principal).getUsername();
-
+    public ApiResponseDTO changeProfile(Authentication authentication, UpdateProfileDTO dto) {
+        String username = ((UserDetails) authentication.getPrincipal()).getUsername();
         User user = userRepository.findOptionalByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
+                        "Nie znaleziono użytkownika z nazwą: " + username
+                ));
 
-        if (userUtils.isNullOrEmpty(name) || userUtils.isNullOrEmpty(surname) || userUtils.isNullOrEmpty(email) || userUtils.isNullOrEmpty(phoneNumber)) {
-            return userUtils.createErrorResponse("Wszystkie wartości muszą być wypełnione.");
-        }
+        if (userUtils.isNullOrEmpty(dto.name()) || userUtils.isNullOrEmpty(dto.surname())
+                || userUtils.isNullOrEmpty(dto.email()) || userUtils.isNullOrEmpty(dto.phoneNumber()))
+            throw new ApplicationException.EmptyFieldException("Wszystkie wartości muszą być wypełnione.");
 
-        if (userUtils.isNullOrEmpty(password) && !userUtils.isNullOrEmpty(repeatPassword)) {
-            return userUtils.createErrorResponse("Hasła są puste.");
-        }
+        if (!dto.password().equals(dto.repeatPassword()))
+            throw new ApplicationException.PasswordsDoNotMatchException("Hasła nie są takie same.");
 
-        if (!password.equals(repeatPassword)) {
-            return userUtils.createErrorResponse("Hasła nie są takie same.");
-        }
+        if (passwordEncoder.matches(dto.password(), user.getPassword()))
+            throw new ApplicationException.InvalidPasswordException("Nowe hasło jest takie samo jak poprzednie.");
 
-        if (passwordEncoder.matches(password, user.getPassword())) {
-            return userUtils.createErrorResponse("Nowe hasło jest takie samo jak poprzednie.");
-        }
-        user.setPassword(passwordEncoder.encode(password));
+        user.setName(dto.name());
+        user.setSurname(dto.surname());
+        user.setEmail(dto.email());
+        user.setPhoneNumber(dto.phoneNumber());
+        user.setPassword(passwordEncoder.encode(dto.password()));
+        userRepository.save(user);
 
-        try {
-            user.setName(name);
-            user.setSurname(surname);
-            user.setPhoneNumber(phoneNumber);
-            user.setEmail(email);
-            userRepository.save(user);
-        } catch (DataAccessException e) {
-            return userUtils.createErrorResponse("Błąd: " + e.getMessage());
-        }
-
-        return userUtils.createSuccessResponse("Poprawnie zapisano zmiany.");
+        return new ApiResponseDTO(true, "Poprawnie zapisano zmiany.");
     }
 
-    public ResponseEntity<Map<String, Object>> deleteUser(Authentication authentication)
-    {
-
-        Object principal = authentication.getPrincipal();
-        String username = ((UserDetails) principal).getUsername();
+    public ApiResponseDTO deleteUser(Authentication authentication) {
+        String username = ((UserDetails) authentication.getPrincipal()).getUsername();
         User user = userRepository.findOptionalByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Nie znaleziono użytkownika z nazwą: " + username));
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
+                        "Nie znaleziono użytkownika z nazwą: " + username
+                ));
 
-        try
-        {
-            userRepository.delete(user);
-        }
-        catch (DataAccessException e)
-        {
-            return userUtils.createErrorResponse("Błąd: " + e.getMessage());
-        }
-
-        return userUtils.createSuccessResponse("Poprawnie usunięto konto.");
+        userRepository.delete(user);
+        return new ApiResponseDTO(true, "Poprawnie usunięto konto.");
     }
 
-    public List<User> getAllUsers() {
-        return userRepository.findAll();
+    public List<UserDTO> getAllUsers() {
+        return userRepository.findAll().stream()
+                .map(u -> new UserDTO(u.getId(), u.getUsername(), u.getName(), u.getSurname(), u.getEmail(), u.getPhoneNumber()))
+                .toList();
     }
 
-    public Optional<User> getUserById(String id) {
-        return userRepository.findById(id);
+    public Optional<UserDTO> getUserById(String id) {
+        return userRepository.findById(id)
+                .map(u -> new UserDTO(u.getId(), u.getUsername(), u.getName(), u.getSurname(), u.getEmail(), u.getPhoneNumber()));
     }
 
-
-    public ResponseEntity<Map<String, Object>> logout(HttpServletRequest request) {
+    public ApiResponseDTO logout(HttpServletRequest request) {
         String token = jwtUtil.extractJwtFromRequest(request);
+        if (token == null)
+            throw new ApplicationException.UserNotFoundException("Nie znaleziono tokenu.");
 
-        if (token == null) {
-            return userUtils.createErrorResponse("Nie znaleziono tokenu");
-        }
-        Claims claims;
-        try {
-            claims = jwtUtil.extractAllClaims(token);
-        } catch (DataAccessException e) {
-            return userUtils.createErrorResponse("Błąd: " + e.getMessage());
-        }
-
-        Date issuedAt = claims.getIssuedAt();
-        BlacklistedToken blacklistedToken = new BlacklistedToken(token, issuedAt);
+        Claims claims = jwtUtil.extractAllClaims(token);
+        BlacklistedToken blacklistedToken = new BlacklistedToken(token, claims.getIssuedAt());
         blacklistedTokenRepository.save(blacklistedToken);
 
-
-        return userUtils.createSuccessResponse("Wylogowano pomyślnie");
-
+        return new ApiResponseDTO(true, "Wylogowano pomyślnie");
     }
-    public List<User> getUsersByProjectId(String projectId) {
+
+    public List<UserDTO> getUsersByProjectId(String projectId) {
         return projectRepository.findById(projectId)
-                .map(project -> {
-                    List<User> users = new ArrayList<>();
-                    if (project.getOwner() != null) {
-                        users.add(project.getOwner());
-                    }
-                    if (project.getMembers() != null) {
-                        users.addAll(project.getMembers());
-                    }
-                    return users;
-                })
+                .map(p -> Stream.concat(
+                                p.getMembers() != null ? p.getMembers().stream() : Stream.empty(),
+                                Stream.ofNullable(p.getOwner())
+                        ).map(u -> new UserDTO(u.getId(), u.getUsername(), u.getName(), u.getSurname(), u.getEmail(), u.getPhoneNumber()))
+                        .toList())
                 .orElse(Collections.emptyList());
     }
 
-    public List<User> getUsersByTaskId(String taskId) {
+    public List<UserDTO> getUsersByTaskId(String taskId) {
         return taskRepository.findById(taskId)
-                .map(task -> task.getAssignedTo() != null ? task.getAssignedTo() : Collections.<User>emptyList())
-                .orElse(Collections.<User>emptyList());
+                .map(t -> {
+                    if (t.getAssignedTo() != null) {
+                        return t.getAssignedTo().stream()
+                                .map(u -> new UserDTO(u.getId(), u.getUsername(), u.getName(), u.getSurname(), u.getEmail(), u.getPhoneNumber()))
+                                .toList();
+                    } else {
+                        return Collections.<UserDTO>emptyList();
+                    }
+                })
+                .orElseGet(Collections::emptyList);
     }
-
 }

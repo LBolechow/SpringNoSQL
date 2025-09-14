@@ -1,9 +1,12 @@
 package com.lukbol.ProjectNoSQL.Controllers;
 
+import com.lukbol.ProjectNoSQL.DTOs.ApiResponseDTO;
+import com.lukbol.ProjectNoSQL.DTOs.AuthenticateRequestDTO;
 import com.lukbol.ProjectNoSQL.Services.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.Map;
@@ -18,9 +21,9 @@ public class LoginController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> authenticateUser(@RequestParam String usernameOrEmail,
-                                                                @RequestParam String password) {
-        return userService.authenticateUser(usernameOrEmail, password);
+    public ResponseEntity<ApiResponseDTO> authenticateUser(@RequestBody AuthenticateRequestDTO requestDTO) {
+        ApiResponseDTO responseDTO = userService.authenticateUser(requestDTO);
+        return ResponseEntity.ok(responseDTO);
     }
 
 

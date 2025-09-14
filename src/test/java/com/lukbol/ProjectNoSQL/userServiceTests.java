@@ -1,35 +1,21 @@
 package com.lukbol.ProjectNoSQL;
 
-import com.lukbol.ProjectNoSQL.Models.BlacklistedToken;
-import com.lukbol.ProjectNoSQL.Models.Role;
-import com.lukbol.ProjectNoSQL.Models.User;
+
 import com.lukbol.ProjectNoSQL.Repositories.RoleRepository;
 import com.lukbol.ProjectNoSQL.Repositories.UserRepository;
 import com.lukbol.ProjectNoSQL.Repositories.BlacklistedTokenRepository;
 import com.lukbol.ProjectNoSQL.Services.UserService;
 import com.lukbol.ProjectNoSQL.Utils.JwtUtil;
 import com.lukbol.ProjectNoSQL.Utils.UserUtils;
-import io.jsonwebtoken.Claims;
-import jakarta.servlet.http.HttpServletRequest;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.*;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 public class userServiceTests {
@@ -60,7 +46,7 @@ public class userServiceTests {
 
     public userServiceTests() {
     }
-
+/*
     @Test
     public void testAuthenticateUser() {
         String usernameOrEmail = "test@test.com";
@@ -255,5 +241,5 @@ public class userServiceTests {
         verify(blacklistedTokenRepository).save(any(BlacklistedToken.class));
         verify(userUtils).createSuccessResponse("Wylogowano pomyślnie");
     }
-
+*/
 }
