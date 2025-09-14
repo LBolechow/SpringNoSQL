@@ -22,9 +22,13 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Stream;
 
+import static com.lukbol.ProjectNoSQL.Common.Constants.*;
+
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
+
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
@@ -35,6 +39,8 @@ public class UserService {
     private final ProjectRepository projectRepository;
     private final TaskRepository taskRepository;
 
+    private static final String USER_ROLE = "ROLE_CLIENT";
+
     public ApiResponseDTO authenticateUser(AuthenticateRequestDTO requestDTO) {
         String usernameOrEmail = requestDTO.usernameOrEmail();
         String password = requestDTO.password();
@@ -43,9 +49,7 @@ public class UserService {
         if (usernameOrEmail.contains("@") && usernameOrEmail.contains(".")) {
             User userByEmail = userRepository.findByEmail(usernameOrEmail);
             if (userByEmail == null) {
-                throw new ApplicationException.UserNotFoundException(
-                        "Nie znaleziono użytkownika o takim adresie email."
-                );
+                throw new ApplicationException.UserNotFoundException(USER_NOT_FOUND_BY_EMAIL);
             }
             username = userByEmail.getUsername();
         } else {
@@ -53,9 +57,7 @@ public class UserService {
         }
 
         User user = userRepository.findOptionalByUsername(username)
-                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
-                        "Brak użytkownika z taką nazwą: " + username
-                ));
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(String.format(USER_NOT_FOUND, username)));
 
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(username, password)
@@ -63,40 +65,38 @@ public class UserService {
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         String token = jwtUtil.generateToken(username);
-        return new ApiResponseDTO(true, "Zalogowano pomyślnie. Token: " + token);
+        return new ApiResponseDTO(true, String.format(AUTHENTICATED_SUCCESSFULLY, token));
     }
 
     public ApiResponseDTO registerUser(RegisterUserDTO dto) {
         if (userUtils.emailExists(dto.email()))
-            throw new ApplicationException.UserWithEmailAlreadyExistsException("Użytkownik o takim adresie email już istnieje.");
+            throw new ApplicationException.UserWithEmailAlreadyExistsException(EMAIL_ALREADY_EXISTS);
 
         if (userUtils.phoneNumberExists(dto.phoneNumber()))
-            throw new ApplicationException.UserWithPhoneNumberAlreadyExistsException("Użytkownik o takim numerze telefonu już istnieje.");
+            throw new ApplicationException.UserWithPhoneNumberAlreadyExistsException(PHONE_ALREADY_EXISTS);
 
         if (userUtils.usernameExists(dto.username()))
-            throw new ApplicationException.UserWithUsernameAlreadyExistsException("Użytkownik o takiej nazwie użytkownika już istnieje.");
+            throw new ApplicationException.UserWithUsernameAlreadyExistsException(USERNAME_ALREADY_EXISTS);
 
         if (!userUtils.isValidPassword(dto.password()))
-            throw new ApplicationException.InvalidPasswordException("Hasło musi spełniać określone kryteria bezpieczeństwa.");
+            throw new ApplicationException.InvalidPasswordException(INVALID_PASSWORD);
 
         User user = new User(dto.name(), dto.surname(), dto.email(), dto.phoneNumber(),
                 passwordEncoder.encode(dto.password()), dto.username(), false);
-        Role role = roleRepository.findByName("ROLE_CLIENT");
+        Role role = roleRepository.findByName(USER_ROLE);
         user.setRoles(Collections.singletonList(role));
 
-        userRepository.save(user); // jeśli coś pójdzie nie tak, DataAccessException zostanie obsłużone globalnie
-        return new ApiResponseDTO(true, "Poprawnie utworzono konto.");
+        userRepository.save(user);
+        return new ApiResponseDTO(true, ACCOUNT_CREATED);
     }
 
     public UserDTO getUserDetails(Authentication authentication) {
         if (authentication == null)
-            throw new ApplicationException.UserNotFoundException("Brak uwierzytelnienia.");
+            throw new ApplicationException.UserNotFoundException(USER_NOT_AUTHORIZED);
 
         String username = ((UserDetails) authentication.getPrincipal()).getUsername();
         User user = userRepository.findOptionalByUsername(username)
-                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
-                        "Nie znaleziono użytkownika z nazwą: " + username
-                ));
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(String.format(USER_NOT_FOUND, username)));
 
         return new UserDTO(user.getId(), user.getUsername(), user.getName(), user.getSurname(), user.getEmail(), user.getPhoneNumber());
     }
@@ -104,19 +104,17 @@ public class UserService {
     public ApiResponseDTO changeProfile(Authentication authentication, UpdateProfileDTO dto) {
         String username = ((UserDetails) authentication.getPrincipal()).getUsername();
         User user = userRepository.findOptionalByUsername(username)
-                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
-                        "Nie znaleziono użytkownika z nazwą: " + username
-                ));
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(String.format(USER_NOT_FOUND, username)));
 
         if (userUtils.isNullOrEmpty(dto.name()) || userUtils.isNullOrEmpty(dto.surname())
                 || userUtils.isNullOrEmpty(dto.email()) || userUtils.isNullOrEmpty(dto.phoneNumber()))
-            throw new ApplicationException.EmptyFieldException("Wszystkie wartości muszą być wypełnione.");
+            throw new ApplicationException.EmptyFieldException(EMPTY_FIELDS);
 
         if (!dto.password().equals(dto.repeatPassword()))
-            throw new ApplicationException.PasswordsDoNotMatchException("Hasła nie są takie same.");
+            throw new ApplicationException.PasswordsDoNotMatchException(PASSWORDS_DO_NOT_MATCH);
 
         if (passwordEncoder.matches(dto.password(), user.getPassword()))
-            throw new ApplicationException.InvalidPasswordException("Nowe hasło jest takie samo jak poprzednie.");
+            throw new ApplicationException.InvalidPasswordException(PASSWORD_SAME_AS_OLD);
 
         user.setName(dto.name());
         user.setSurname(dto.surname());
@@ -125,18 +123,16 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(dto.password()));
         userRepository.save(user);
 
-        return new ApiResponseDTO(true, "Poprawnie zapisano zmiany.");
+        return new ApiResponseDTO(true, PROFILE_UPDATED);
     }
 
     public ApiResponseDTO deleteUser(Authentication authentication) {
         String username = ((UserDetails) authentication.getPrincipal()).getUsername();
         User user = userRepository.findOptionalByUsername(username)
-                .orElseThrow(() -> new ApplicationException.UserNotFoundException(
-                        "Nie znaleziono użytkownika z nazwą: " + username
-                ));
+                .orElseThrow(() -> new ApplicationException.UserNotFoundException(String.format(USER_NOT_FOUND, username)));
 
         userRepository.delete(user);
-        return new ApiResponseDTO(true, "Poprawnie usunięto konto.");
+        return new ApiResponseDTO(true, ACCOUNT_DELETED);
     }
 
     public List<UserDTO> getAllUsers() {
@@ -153,13 +149,13 @@ public class UserService {
     public ApiResponseDTO logout(HttpServletRequest request) {
         String token = jwtUtil.extractJwtFromRequest(request);
         if (token == null)
-            throw new ApplicationException.UserNotFoundException("Nie znaleziono tokenu.");
+            throw new ApplicationException.UserNotFoundException(TOKEN_NOT_FOUND);
 
         Claims claims = jwtUtil.extractAllClaims(token);
         BlacklistedToken blacklistedToken = new BlacklistedToken(token, claims.getIssuedAt());
         blacklistedTokenRepository.save(blacklistedToken);
 
-        return new ApiResponseDTO(true, "Wylogowano pomyślnie");
+        return new ApiResponseDTO(true, LOGGED_OUT);
     }
 
     public List<UserDTO> getUsersByProjectId(String projectId) {
